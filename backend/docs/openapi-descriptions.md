@@ -109,3 +109,133 @@ client SDK generation.
 - **Swagger UI**: available at the server root when `NODE_ENV !== 'production'`
 - **This file**: mirrors the spec for quick reference; always validate against
   the canonical `openapi.json`.
+
+---
+
+## Liquidation Mechanism
+
+This section documents how liquidation works for undercollateralised loans,
+including worked numeric examples for **partial liquidation** scenarios.
+
+### Health Factor Formula
+
+```
+healthFactor = (collateralValue × liquidationThreshold) / outstandingDebt
+```
+
+- `collateralValue` — current appraised value of the loan's collateral.
+- `liquidationThreshold` — the fraction of collateral value counted toward
+  coverage (e.g. `0.80`).
+- `outstandingDebt` — principal + accrued interest still owed.
+
+A loan is **liquidatable** when `healthFactor < 1.0`. A loan is **safe** when
+`healthFactor >= 1.0`.
+
+### Partial Liquidation
+
+A partial liquidation repays only a portion of the outstanding debt in exchange
+for a proportional slice of collateral plus a liquidation bonus. The protocol
+caps how much debt a single liquidation may clear (`maxLiquidationRatio`, e.g.
+`0.50` = up to 50% of outstanding debt per call) so that borrowers retain
+collateral when possible.
+
+**Liquidation bonus** — liquidators are compensated for taking on risk and
+providing immediate liquidity. The bonus is a percentage of the debt repaid
+(`liquidationBonus`, e.g. `0.05` = 5%) and is **distributed as additional
+collateral** seized by the liquidator:
+
+```
+collateralSeized = debtRepaid × (1 + liquidationBonus)
+```
+
+The bonus is not minted or paid in cash — it is taken from the borrower's
+collateral pool. The borrower's remaining collateral is reduced by
+`collateralSeized`, and their outstanding debt is reduced by `debtRepaid`.
+
+### Worked Examples
+
+All examples assume `liquidationThreshold = 0.80`, `liquidationBonus = 0.05`,
+and `maxLiquidationRatio = 0.50`.
+
+#### Example 1 — Small partial liquidation
+
+| Field | Value |
+|-------|-------|
+| Collateral value | 10,000 |
+| Outstanding debt | 9,000 |
+| Health factor | (10,000 × 0.80) / 9,000 = **0.889** (liquidatable) |
+
+A liquidator repays **2,000** of debt:
+
+- `collateralSeized = 2,000 × 1.05 = 2,100`
+- New collateral value = 10,000 − 2,100 = **7,900**
+- New outstanding debt = 9,000 − 2,000 = **7,000**
+- New health factor = (7,900 × 0.80) / 7,000 = **0.903**
+
+The loan remains liquidatable (still `< 1.0`), so further partial liquidations
+are permitted.
+
+#### Example 2 — Partial liquidation that restores health
+
+| Field | Value |
+|-------|-------|
+| Collateral value | 12,000 |
+| Outstanding debt | 10,000 |
+| Health factor | (12,000 × 0.80) / 10,000 = **0.96** (liquidatable) |
+
+A liquidator repays the maximum allowed (`10,000 × 0.50 = 5,000`):
+
+- `collateralSeized = 5,000 × 1.05 = 5,250`
+- New collateral value = 12,000 − 5,250 = **6,750**
+- New outstanding debt = 10,000 − 5,000 = **5,000**
+- New health factor = (6,750 × 0.80) / 5,000 = **1.08**
+
+The loan is now healthy (`>= 1.0`) and cannot be re-liquidated until the health
+factor drops below `1.0` again.
+
+#### Example 3 — Capped partial liquidation (still unhealthy)
+
+| Field | Value |
+|-------|-------|
+| Collateral value | 8,000 |
+| Outstanding debt | 9,000 |
+| Health factor | (8,000 × 0.80) / 9,000 = **0.711** (deeply liquidatable) |
+
+A liquidator repays the maximum allowed (`9,000 × 0.50 = 4,500`):
+
+- `collateralSeized = 4,500 × 1.05 = 4,725`
+- New collateral value = 8,000 − 4,725 = **3,275**
+- New outstanding debt = 9,000 − 4,500 = **4,500**
+- New health factor = (3,275 × 0.80) / 4,500 = **0.582**
+
+Because the per-call cap was hit, the loan is still liquidatable. A second
+liquidation call may clear up to `4,500 × 0.50 = 2,250` more debt.
+
+### Minimum Health Factor to Avoid Re-Liquidation
+
+After a partial liquidation, the loan is only protected from further
+liquidation once its health factor is **`>= 1.0`**. There is no separate
+"buffer" threshold: any health factor below `1.0` leaves the loan open to
+another liquidation call. Liquidators should size their repayment so the
+resulting health factor reaches at least `1.0` (see Example 2); if the per-call
+cap prevents this, multiple sequential calls are required.
+
+### Liquidator's Guide
+
+1. **Find liquidatable loans.** Poll `GET /health/{loanId}` (or scan
+   `GET /loans`) for loans whose `healthFactor < 1.0`.
+2. **Size the repayment.** Choose `debtRepaid` up to
+   `outstandingDebt × maxLiquidationRatio`. To fully restore health, solve for
+   the repayment that brings the post-liquidation health factor to `>= 1.0`.
+3. **Preview the outcome.** Use `POST /loan/repayment-preview` to confirm the
+   debt/collateral split before committing.
+4. **Trigger the liquidation.** Call `POST /loan/liquidate` with the loan ID and
+   the chosen `debtRepaid` amount. The endpoint repays the debt, seizes
+   `debtRepaid × (1 + liquidationBonus)` of collateral, and records the
+   transaction.
+5. **Profit.** The liquidator's gain is the bonus portion of the seized
+   collateral: `debtRepaid × liquidationBonus`. In Example 1, repaying `2,000`
+   seizes `2,100` of collateral — a `100` bonus (5%). The liquidator may hold or
+   sell the seized collateral to realise the profit.
+6. **Verify.** Confirm the resulting health factor via `GET /health/{loanId}`
+   and the recorded transaction via `GET /transactions/{hash}/status`.
