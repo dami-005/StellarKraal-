@@ -1,9 +1,40 @@
+import logger from "./utils/logger";
+
 export type LoanStatus = "pending" | "active" | "repaid" | "liquidated" | "at_risk";
 
 export interface TransitionRecord {
   from: LoanStatus;
   to: LoanStatus;
   at: string; // ISO timestamp
+}
+
+export interface TransitionLogContext {
+  loanId?: string;
+  triggeredBy?: string;
+}
+
+const SAFE_TRIGGER_SOURCES = new Set(["system", "scheduler", "admin", "user", "api", "liquidation"]);
+
+function safeTriggeredBy(triggeredBy?: string): string {
+  if (triggeredBy && SAFE_TRIGGER_SOURCES.has(triggeredBy)) return triggeredBy;
+  return "system";
+}
+
+/** Log a state transition without emitting wallet addresses or other actor PII. */
+export function logLoanStateTransition(fields: {
+  loanId: string;
+  fromState: string;
+  toState: string;
+  triggeredBy?: string;
+  timestamp: string;
+}): void {
+  logger.info("loan_state_transition", {
+    loanId: fields.loanId,
+    fromState: fields.fromState,
+    toState: fields.toState,
+    triggeredBy: safeTriggeredBy(fields.triggeredBy),
+    timestamp: fields.timestamp,
+  });
 }
 
 export class InvalidTransitionError extends Error {
@@ -38,12 +69,21 @@ const TRANSITIONS: Record<LoanStatus, LoanStatus[]> = {
 export function transition(
   current: LoanStatus,
   next: LoanStatus,
-  history: TransitionRecord[]
+  history: TransitionRecord[],
+  context: TransitionLogContext = {}
 ): LoanStatus {
   if (!TRANSITIONS[current].includes(next)) {
     throw new InvalidTransitionError(current, next);
   }
-  history.push({ from: current, to: next, at: new Date().toISOString() });
+  const timestamp = new Date().toISOString();
+  history.push({ from: current, to: next, at: timestamp });
+  logLoanStateTransition({
+    loanId: context.loanId ?? "unknown",
+    fromState: current,
+    toState: next,
+    triggeredBy: context.triggeredBy,
+    timestamp,
+  });
   return next;
 }
 

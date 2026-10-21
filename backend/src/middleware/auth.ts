@@ -354,7 +354,10 @@ export function jwtMiddleware(req: Request, res: Response, next: NextFunction): 
 
   try {
     const payload = verifyJwt(authHeader.slice(7));
-    (req as Request & { user: { publicKey: unknown } }).user = { publicKey: payload.sub };
+    (req as Request & { user: { publicKey: unknown; role?: string } }).user = {
+      publicKey: payload.sub,
+      role: typeof payload.role === 'string' ? payload.role : undefined,
+    };
     next();
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'unknown';

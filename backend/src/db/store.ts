@@ -6,6 +6,7 @@
  * Note: This is an in-memory implementation for development.
  * In production, replace with actual database queries.
  */
+import { logLoanStateTransition } from '../loanStateMachine';
 
 export interface AppraisalEntry {
   date: string;
@@ -492,12 +493,22 @@ export function getLoan(id: string): LoanRecord | undefined {
  */
 export function updateLoan(
   id: string,
-  updates: Partial<Omit<LoanRecord, 'id' | 'createdAt'>>
+  updates: Partial<Omit<LoanRecord, 'id' | 'createdAt'>>,
+  triggeredBy = 'system'
 ): LoanRecord | undefined {
   const record = loanTable.get(id);
   if (!record) return undefined;
   const updated = { ...record, ...updates };
   loanTable.set(id, updated);
+  if (record.status && updates.status && record.status !== updates.status) {
+    logLoanStateTransition({
+      loanId: id,
+      fromState: record.status,
+      toState: updates.status,
+      triggeredBy,
+      timestamp: new Date().toISOString(),
+    });
+  }
   return updated;
 }
 

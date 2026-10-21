@@ -10,6 +10,8 @@ on:
   push:
     branches:
       - main
+    tags:
+      - "v*"
   schedule:
     - cron: "0 0 * * 0" # Weekly on Sunday at midnight UTC
   workflow_dispatch:
@@ -78,6 +80,28 @@ jobs:
           path: trivy-backend-results.sarif
           retention-days: 30
 
+      - name: Generate SBOM (CycloneDX JSON) for backend image
+        uses: anchore/sbom-action@v0
+        with:
+          image: stellarkraal-backend:${{ github.sha }}
+          format: cyclonedx-json
+          output-file: sbom-backend.cyclonedx.json
+          artifact-name: sbom-backend
+
+      - name: Upload backend SBOM as artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom-backend
+          path: sbom-backend.cyclonedx.json
+          retention-days: 30
+
+      - name: Attach backend SBOM to release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: sbom-backend.cyclonedx.json
+
   scan-frontend:
     runs-on: ubuntu-latest
     permissions:
@@ -137,3 +161,25 @@ jobs:
           name: trivy-frontend-results
           path: trivy-frontend-results.sarif
           retention-days: 30
+
+      - name: Generate SBOM (CycloneDX JSON) for frontend image
+        uses: anchore/sbom-action@v0
+        with:
+          image: stellarkraal-frontend:${{ github.sha }}
+          format: cyclonedx-json
+          output-file: sbom-frontend.cyclonedx.json
+          artifact-name: sbom-frontend
+
+      - name: Upload frontend SBOM as artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom-frontend
+          path: sbom-frontend.cyclonedx.json
+          retention-days: 30
+
+      - name: Attach frontend SBOM to release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: sbom-frontend.cyclonedx.json

@@ -25,7 +25,7 @@ import {
   batchRegisterCollateral,
   getCollateralById,
 } from '../services/collateralService';
-import { getProfile, updateProfile, insertAuditEntry, listCollateral, listLoans, getTransaction } from '../db/store';
+import { getProfile, updateProfile, insertAuditEntry, listCollateral, listLoans, getLoan, getTransaction } from '../db/store';
 import { updateProfileSchema } from '../validators/profile';
 import { validate } from '../middleware/validate';
 import { auditMiddleware, redact, auditLogger } from '../middleware/audit';
@@ -349,6 +349,14 @@ v1Router.get(
     }
   })
 );
+
+v1Router.get('/loans/:id', readLimiter, (req: Request, res: Response) => {
+  const loan = getLoan(req.params.id as string);
+  if (!loan) {
+    return res.status(404).json({ error: 'Loan not found' });
+  }
+  res.json(loan);
+});
 
 v1Router.post(
   '/oracle/price-update',

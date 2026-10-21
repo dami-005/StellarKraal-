@@ -304,4 +304,147 @@ cargo test
 | `PORT already in use` | Port 3001 occupied | Stop the conflicting process or set a different `PORT` in `.env` |
 | `Cannot conn
 
-/* … truncated 9874 chars — edit only what you need near the top … */
+Common errors and their resolutions are documented in **[docs/troubleshooting.md](docs/troubleshooting.md)**, covering:
+
+- **Setup** — dependency conflicts, missing CLI tools, build failures, SQLite addon errors
+- **Runtime** — port conflicts, RPC connectivity, CORS, JWT errors, Docker health checks
+- **Contract** — invocation errors, sequence number mismatches, missing contract deployments
+- **Database** — SQLite open failures, migration conflicts
+
+Quick reference for the most frequent issues:
+
+| Symptom | Resolution |
+|---|---|
+| `PORT already in use` | Stop the process on that port or change `PORT` in `.env` |
+| `Cannot connect to RPC_URL` | Verify network and RPC endpoint reachability |
+| `npm test` failures | Ensure dependencies are installed and Node.js 20+ is active |
+| `Docker build` errors | Rebuild with `docker-compose build --no-cache` |
+
+For anything not listed here, see the [full troubleshooting guide](docs/troubleshooting.md).
+
+## Contribution Guidelines
+
+This repository uses a documented contribution workflow. See [CONTRIBUTING.md](CONTRIBUTING.md) for branch naming, commit style, PR template, and code review expectations.
+
+New contributors should start with the **[Contributing Quickstart](docs/development/contributing-quickstart.md)** — a step-by-step guide verified on Ubuntu 22.04 and macOS that covers prerequisites, cloning, running tests, and opening your first PR.
+
+### Pull Request Checklist
+
+- [ ] Branch created from latest `main`
+- [ ] Commit messages follow Conventional Commits
+- [ ] Tests run successfully locally
+- [ ] Documentation updated when necessary
+
+## Lighthouse CI
+
+Performance thresholds are enforced in `frontend/lighthouserc.js`. The CI Lighthouse job runs against the built app and **fails the build** if any score falls below:
+
+| Category | Minimum Score |
+|---|---|
+| Performance | 80 |
+| Accessibility | 90 |
+| Best Practices | 90 |
+| SEO | 80 |
+
+Scores are reported as a GitHub Actions step summary.
+
+## Security & Vulnerability Management
+
+Dependencies are scanned automatically:
+
+- **Dependabot** monitors `backend/`, `frontend/`, and `contracts/stellarkraal/` packages weekly. PRs are labelled `dependencies` and `security`. See [docs/guides/dependabot.md](docs/guides/dependabot.md) for the triage/merge process.
+- **npm audit** runs every Monday via the [`npm-audit`](.github/workflows/npm-audit.yml) workflow. The workflow fails if any `high` or `critical` severity vulnerability is found.
+
+To run an audit locally:
+
+```bash
+cd backend && npm audit --audit-level=high
+cd frontend && npm audit --audit-level=high
+```
+
+To report a security vulnerability, please read [SECURITY.md](SECURITY.md) for our full vulnerability disclosure policy, reporting instructions, response timeline, and safe harbour statement.
+
+## Development Scripts
+
+Run the following from the repository root:
+
+```bash
+npm run test:contract
+npm run test:backend
+npm run test:frontend
+```
+
+## Documentation
+
+| Document | Description |
+|---|---|
+| [Loan State Machine](docs/protocol/loan-state-machine.md) | All loan states, valid transitions, triggering events, and on-chain event mapping |
+| [API Quickstart](docs/guides/api-quickstart.md) | Base URL, auth flow, and common `/api/v1` operations |
+| [Freighter Wallet Integration](docs/guides/freighter-integration.md) | `freighterClient.ts` API, connect/sign/disconnect flow, mock API for testing, and network mismatch detection |
+| [Rate limits](docs/guides/rate-limits.md) | Global, auth, read, and write tiers; headers and retry behavior |
+| [Liquidation Mechanism](docs/protocol/liquidation.md) | Health factor formula, liquidation threshold, partial liquidation examples |
+| [Smart Contract Interface](docs/contracts/stellarkraal-interface.md) | Soroban contract public API, error codes, state changes, and CLI invocation guide |
+| [Contract Event Listener](docs/guides/contract-event-listener.md) | Polling interval, ledger cursor tracking, event handling pipeline, and structured logging |
+| [Audit Middleware](docs/guides/audit-middleware.md) | What is logged (method, path, status, duration, user), the `redact` function, PII masking, and how to add new audit fields |
+| [Event Listener Lifecycle](docs/guides/event-listener-lifecycle.md) | When `startEventListener`/`stopEventListener` are called, how missed events replay on restart, and polling interval config |
+| [Contract API Docs](https://teslims2.github.io/StellarKraal-/contracts/) | Auto-generated `cargo doc` reference published to GitHub Pages |
+| [Observability Stack](docs/observability.md) | Prometheus metrics, Loki/Promtail logs, Grafana dashboards, alert rules, and how to extend each |
+| [API Error Code Reference](docs/api-error-codes.md) | All HTTP status codes, application error codes, and contract error codes with descriptions |
+| [CORS Configuration](docs/cors-configuration.md) | Allowed origins strategy, per-environment setup, and troubleshooting |
+| [Docker Compose Services](docs/docker-compose-services.md) | Service dependencies, startup order, health checks, and volumes |
+| [Performance Tuning Guide](docs/performance-tuning.md) | Environment variables, DB tuning, caching, and profiling guidance |
+| [Threat Model](docs/security/threat-model.md) | Key attack surfaces (JWT forgery, oracle manipulation, re-entrancy, webhook replay), mitigations, and residual risk register |
+
+## User Guides
+
+| Guide | Description |
+|---|---|
+| [Register Livestock as Collateral](docs/guides/register-collateral.md) | Step-by-step guide (English + Kiswahili) for registering animals and requesting a loan |
+| [API Integration Tutorial](docs/guides/api-integration-tutorial.md) | How an external app can register collateral, request a loan, and monitor loan status via webhooks |
+| [Webhook Payload Reference](docs/guides/webhooks.md) | JSON schemas, example payloads, signature verification, and encrypted-delivery guide for all event types |
+
+See also: [Help & Guides page](/help) in the app.
+
+## User Guides
+
+Step-by-step guides for borrowers are in [`docs/guides/`](docs/guides/).
+
+| Guide | Description |
+|---|---|
+| [How to Request a Loan](docs/guides/request-loan.md) | Walks through all four wizard steps: Collateral, Amount, Review, Confirm. Explains LTV, health factor, and origination fee in plain language. |
+| [How to Repay a Loan](docs/guides/repay-loan.md) | Covers partial vs full repayment, how repayment improves the health factor, repayment deadlines, and a repayment calculator example. |
+| [Understanding Liquidation](docs/guides/understanding-liquidation.md) | Borrower-facing explainer of the health factor, when liquidation occurs, worked numeric example, and how to avoid it. |
+| [Accessibility Guide](docs/guides/accessibility.md) | ARIA usage patterns, testing commands, common mistakes, and pre-PR checklist for accessible components. |
+
+## Architecture Decision Records
+
+Key design decisions are documented as ADRs in [`docs/adr/`](docs/adr/).
+
+| ADR | Title | Status |
+|-----|-------|--------|
+| [ADR-001](docs/adr/ADR-001-soroban.md) | Use Soroban for On-Chain Loan Lifecycle Management | Accepted |
+| [ADR-002](docs/adr/ADR-002-jwt-auth.md) | JWT-Based Authentication Strategy | Accepted |
+| [ADR-003](docs/adr/ADR-003-sqlite.md) | SQLite as the Off-Chain Database | Accepted |
+| [ADR-004](docs/adr/ADR-004-nextjs-tailwind.md) | Next.js 14 + Tailwind CSS for the Frontend | Accepted |
+| [ADR-005](docs/adr/ADR-005-collateral-appraisal-model.md) | Off-chain collateral appraisal model | Accepted |
+| [ADR-006](docs/adr/ADR-006-oracle-design.md) | Multi-oracle median aggregation for price feeds | Accepted |
+| [ADR-007](docs/adr/ADR-007-oracle-twap.md) | Time-Weighted Average Price (TWAP) for liquidation price feeds | Accepted |
+| [ADR-008](docs/adr/ADR-008-webhooks.md) | Webhook-based event delivery for loan lifecycle notifications | Accepted |
+| [ADR-009](docs/adr/ADR-009-api-v2-design.md) | API v2 Design Direction (REST vs GraphQL vs tRPC) | Superseded by ADR-011 |
+| [ADR-010](docs/adr/ADR-010-event-driven-architecture.md) | Event-Driven Architecture | Accepted |
+| [ADR-011](docs/adr/ADR-011-graphql-api-v2.md) | GraphQL as the API v2 Query Layer | Accepted |
+
+To add a new ADR, copy [`docs/adr/template.md`](docs/adr/template.md), increment the number, fill in all sections, and add a row to the table above.
+
+---
+website https://kraal-bloom-connect.lovable.app/
+
+## License
+
+MIT © StellarKraal
+.
+
+## Handsoff notes
+
+<!-- handsoff-issue-1372 -->
+- #1372: Publish OpenAPI spec to docs site and add Swagger UI
